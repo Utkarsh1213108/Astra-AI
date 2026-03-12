@@ -5,6 +5,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
+import SatelliteDetail from "./pages/SatelliteDetail.tsx";
+import AnomalyEngine from "./pages/AnomalyEngine.tsx";
+import RULForecaster from "./pages/RULForecaster.tsx";
+import AlertConfig from "./pages/AlertConfig.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -18,7 +22,10 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="/satellite/:id" element={<SatelliteDetail />} />
+          <Route path="/anomalies" element={<AnomalyEngine />} />
+          <Route path="/rul" element={<RULForecaster />} />
+          <Route path="/alerts" element={<AlertConfig />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
