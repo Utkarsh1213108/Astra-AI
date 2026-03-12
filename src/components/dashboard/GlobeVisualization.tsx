@@ -1,68 +1,57 @@
 import { useRef, useMemo } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, extend } from '@react-three/fiber';
 import { OrbitControls, Sphere, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { satellites } from '@/data/mockData';
 import { useNavigate } from 'react-router-dom';
 
+extend({ Line_: THREE.Line });
+
 function Globe() {
-  const meshRef = useRef<THREE.Mesh>(null);
+  const groupRef = useRef<THREE.Group>(null);
 
   useFrame(({ clock }) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y = clock.getElapsedTime() * 0.05;
+    if (groupRef.current) {
+      groupRef.current.rotation.y = clock.getElapsedTime() * 0.05;
     }
   });
 
   const gridLines = useMemo(() => {
-    const lines: JSX.Element[] = [];
-    // Latitude lines
+    const geometries: { points: THREE.Vector3[] }[] = [];
     for (let lat = -60; lat <= 60; lat += 30) {
       const phi = (90 - lat) * (Math.PI / 180);
       const radius = 2.02 * Math.sin(phi);
       const y = 2.02 * Math.cos(phi);
-      const points: THREE.Vector3[] = [];
+      const pts: THREE.Vector3[] = [];
       for (let i = 0; i <= 64; i++) {
         const theta = (i / 64) * Math.PI * 2;
-        points.push(new THREE.Vector3(radius * Math.cos(theta), y, radius * Math.sin(theta)));
+        pts.push(new THREE.Vector3(radius * Math.cos(theta), y, radius * Math.sin(theta)));
       }
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      lines.push(
-        <lineLoop key={`lat-${lat}`} geometry={geometry}>
-          <lineBasicMaterial color="#0ea5e9" opacity={0.15} transparent />
-        </lineLoop>
-      );
+      geometries.push({ points: pts });
     }
-    // Longitude lines
     for (let lng = 0; lng < 360; lng += 45) {
-      const points: THREE.Vector3[] = [];
+      const pts: THREE.Vector3[] = [];
       for (let i = 0; i <= 64; i++) {
         const phi = (i / 64) * Math.PI;
         const theta = lng * (Math.PI / 180);
-        points.push(new THREE.Vector3(
+        pts.push(new THREE.Vector3(
           2.02 * Math.sin(phi) * Math.cos(theta),
           2.02 * Math.cos(phi),
           2.02 * Math.sin(phi) * Math.sin(theta),
         ));
       }
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      lines.push(
-        <line key={`lng-${lng}`} geometry={geometry}>
-          <lineBasicMaterial color="#0ea5e9" opacity={0.12} transparent />
-        </line>
-      );
+      geometries.push({ points: pts });
     }
-    return lines;
+    return geometries;
   }, []);
 
   return (
-    <group ref={meshRef}>
+    <group ref={groupRef}>
       <Sphere args={[2, 64, 64]}>
         <meshStandardMaterial
           color="#0c1425"
           emissive="#0ea5e9"
           emissiveIntensity={0.03}
-          wireframe={false}
           transparent
           opacity={0.9}
         />
@@ -70,7 +59,12 @@ function Globe() {
       <Sphere args={[2.01, 64, 64]}>
         <meshBasicMaterial color="#0ea5e9" wireframe transparent opacity={0.06} />
       </Sphere>
-      {gridLines}
+      {gridLines.map((g, i) => {
+        const geometry = new THREE.BufferGeometry().setFromPoints(g.points);
+        return (
+          <primitive key={i} object={new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: '#0ea5e9', opacity: 0.12, transparent: true }))} />
+        );
+      })}
     </group>
   );
 }
@@ -81,15 +75,15 @@ function SatelliteMarker({ lat, lng, status, name, id }: {
   const navigate = useNavigate();
   const meshRef = useRef<THREE.Mesh>(null);
 
-  const position = useMemo(() => {
+  const position = useMemo((): [number, number, number] => {
     const phi = (90 - lat) * (Math.PI / 180);
     const theta = (lng + 180) * (Math.PI / 180);
     const r = 2.3;
-    return new THREE.Vector3(
+    return [
       -r * Math.sin(phi) * Math.cos(theta),
       r * Math.cos(phi),
       r * Math.sin(phi) * Math.sin(theta),
-    );
+    ];
   }, [lat, lng]);
 
   const color = status === 'critical' ? '#ef4444' : status === 'warning' ? '#eab308' : '#22c55e';
@@ -103,7 +97,12 @@ function SatelliteMarker({ lat, lng, status, name, id }: {
 
   return (
     <group position={position}>
-      <mesh ref={meshRef} onClick={() => navigate(`/satellite/${id}`)} onPointerOver={(e) => { (e.object as THREE.Mesh).scale.setScalar(1.5); document.body.style.cursor = 'pointer'; }} onPointerOut={(e) => { (e.object as THREE.Mesh).scale.setScalar(1); document.body.style.cursor = 'default'; }}>
+      <mesh
+        ref={meshRef}
+        onClick={() => navigate(`/satellite/${id}`)}
+        onPointerOver={() => { document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { document.body.style.cursor = 'default'; }}
+      >
         <octahedronGeometry args={[0.06, 0]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
       </mesh>
