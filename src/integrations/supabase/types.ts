@@ -14,7 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      satellite_positions: {
+        Row: {
+          altitude: number | null
+          fetched_at: string
+          id: string
+          lat: number
+          lng: number
+          name: string | null
+          norad_id: number
+          sat_timestamp: number | null
+          velocity: number | null
+        }
+        Insert: {
+          altitude?: number | null
+          fetched_at?: string
+          id?: string
+          lat: number
+          lng: number
+          name?: string | null
+          norad_id: number
+          sat_timestamp?: number | null
+          velocity?: number | null
+        }
+        Update: {
+          altitude?: number | null
+          fetched_at?: string
+          id?: string
+          lat?: number
+          lng?: number
+          name?: string | null
+          norad_id?: number
+          sat_timestamp?: number | null
+          velocity?: number | null
+        }
+        Relationships: []
+      }
+      satellite_tle: {
+        Row: {
+          fetched_at: string
+          id: string
+          name: string | null
+          norad_id: number
+          tle_line1: string | null
+          tle_line2: string | null
+        }
+        Insert: {
+          fetched_at?: string
+          id?: string
+          name?: string | null
+          norad_id: number
+          tle_line1?: string | null
+          tle_line2?: string | null
+        }
+        Update: {
+          fetched_at?: string
+          id?: string
+          name?: string | null
+          norad_id?: number
+          tle_line1?: string | null
+          tle_line2?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

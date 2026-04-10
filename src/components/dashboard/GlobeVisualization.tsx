@@ -2,8 +2,9 @@ import { useRef, useMemo } from 'react';
 import { Canvas, useFrame, extend } from '@react-three/fiber';
 import { OrbitControls, Sphere, Html } from '@react-three/drei';
 import * as THREE from 'three';
-import { satellites } from '@/data/mockData';
 import { useNavigate } from 'react-router-dom';
+import { useLiveSatellites, LiveSatellitePosition } from '@/hooks/useLiveSatellites';
+import { satellites as mockSatellites } from '@/data/mockData';
 
 extend({ Line_: THREE.Line });
 
@@ -69,8 +70,8 @@ function Globe() {
   );
 }
 
-function SatelliteMarker({ lat, lng, status, name, id }: {
-  lat: number; lng: number; status: string; name: string; id: string;
+function SatelliteMarker({ lat, lng, name, id, isLive }: {
+  lat: number; lng: number; name: string; id: string; isLive: boolean;
 }) {
   const navigate = useNavigate();
   const meshRef = useRef<THREE.Mesh>(null);
@@ -86,11 +87,11 @@ function SatelliteMarker({ lat, lng, status, name, id }: {
     ];
   }, [lat, lng]);
 
-  const color = status === 'critical' ? '#ef4444' : status === 'warning' ? '#eab308' : '#22c55e';
+  const color = isLive ? '#22c55e' : '#6366f1';
 
   useFrame(({ clock }) => {
     if (meshRef.current) {
-      const scale = status === 'critical' ? 1 + Math.sin(clock.getElapsedTime() * 4) * 0.3 : 1;
+      const scale = 1 + Math.sin(clock.getElapsedTime() * 2) * 0.15;
       meshRef.current.scale.setScalar(scale);
     }
   });
@@ -110,34 +111,83 @@ function SatelliteMarker({ lat, lng, status, name, id }: {
       <Html distanceFactor={8} style={{ pointerEvents: 'none' }}>
         <div className="bg-card/90 border border-border rounded px-2 py-1 whitespace-nowrap backdrop-blur-sm">
           <span className="font-display text-[8px] text-foreground">{name}</span>
+          {isLive && <span className="ml-1 text-[7px] text-success">● LIVE</span>}
         </div>
       </Html>
     </group>
   );
 }
 
+function SceneContent() {
+  const { data: livePositions, isLoading } = useLiveSatellites();
+
+  // Merge live and mock: live takes priority
+  const markers = useMemo(() => {
+    const items: { lat: number; lng: number; name: string; id: string; isLive: boolean }[] = [];
+
+    if (livePositions && livePositions.length > 0) {
+      livePositions.forEach((pos) => {
+        items.push({
+          lat: pos.lat,
+          lng: pos.lng,
+          name: pos.name,
+          id: `norad-${pos.noradId}`,
+          isLive: true,
+        });
+      });
+    }
+
+    // Add mock satellites that don't overlap with live data
+    mockSatellites.forEach((sat) => {
+      items.push({
+        lat: sat.lat,
+        lng: sat.lng,
+        name: sat.name,
+        id: sat.id,
+        isLive: false,
+      });
+    });
+
+    return items;
+  }, [livePositions]);
+
+  return (
+    <>
+      <ambientLight intensity={0.3} />
+      <directionalLight position={[5, 3, 5]} intensity={0.8} color="#0ea5e9" />
+      <directionalLight position={[-5, -3, -5]} intensity={0.3} color="#6366f1" />
+      <Globe />
+      {markers.map((m, i) => (
+        <SatelliteMarker
+          key={`${m.id}-${i}`}
+          lat={m.lat}
+          lng={m.lng}
+          name={m.name}
+          id={m.id}
+          isLive={m.isLive}
+        />
+      ))}
+      <OrbitControls enableZoom enablePan={false} autoRotate autoRotateSpeed={0.3} minDistance={3.5} maxDistance={8} />
+    </>
+  );
+}
+
 const GlobeVisualization = () => {
+  const { data: livePositions } = useLiveSatellites();
+  const liveCount = livePositions?.length || 0;
+
   return (
     <div className="w-full h-full relative">
       <Canvas camera={{ position: [0, 2, 5], fov: 45 }} gl={{ antialias: true }}>
-        <ambientLight intensity={0.3} />
-        <directionalLight position={[5, 3, 5]} intensity={0.8} color="#0ea5e9" />
-        <directionalLight position={[-5, -3, -5]} intensity={0.3} color="#6366f1" />
-        <Globe />
-        {satellites.map(sat => (
-          <SatelliteMarker
-            key={sat.id}
-            lat={sat.lat}
-            lng={sat.lng}
-            status={sat.status}
-            name={sat.name}
-            id={sat.id}
-          />
-        ))}
-        <OrbitControls enableZoom enablePan={false} autoRotate autoRotateSpeed={0.3} minDistance={3.5} maxDistance={8} />
+        <SceneContent />
       </Canvas>
       <div className="absolute top-2 left-2 bg-card/80 backdrop-blur-sm border border-border rounded-lg px-3 py-2">
         <span className="font-display text-[10px] tracking-wider text-primary">ORBITAL MAP — LIVE</span>
+        {liveCount > 0 && (
+          <span className="ml-2 text-[9px] text-success font-display">
+            {liveCount} LIVE TRACKED
+          </span>
+        )}
       </div>
     </div>
   );

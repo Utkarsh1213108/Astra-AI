@@ -1,18 +1,22 @@
 import { Satellite as SatIcon, AlertTriangle, ShieldCheck, Activity } from 'lucide-react';
 import { satellites, anomalyEvents } from '@/data/mockData';
+import { useLiveSatellites } from '@/hooks/useLiveSatellites';
 import { motion } from 'framer-motion';
 
 const KPIWidgets = () => {
-  const totalSats = satellites.length;
+  const { data: livePositions } = useLiveSatellites();
+  const liveCount = livePositions?.length || 0;
+
+  const totalSats = satellites.length + liveCount;
   const activeAnomalies = anomalyEvents.filter(a => !a.resolved).length;
   const criticalAlerts = satellites.filter(s => s.status === 'critical').length;
-  const healthySats = satellites.filter(s => s.status === 'healthy').length;
+  const healthySats = satellites.filter(s => s.status === 'healthy').length + liveCount;
 
   const kpis = [
     { label: 'Total Satellites', value: totalSats, icon: SatIcon, color: 'text-primary', glow: 'glow-primary', bg: 'bg-primary/10' },
     { label: 'Active Anomalies', value: activeAnomalies, icon: AlertTriangle, color: 'text-warning', glow: 'glow-warning', bg: 'bg-warning/10' },
     { label: 'Critical Alerts', value: criticalAlerts, icon: Activity, color: 'text-destructive', glow: 'glow-danger', bg: 'bg-destructive/10' },
-    { label: 'Healthy Systems', value: healthySats, icon: ShieldCheck, color: 'text-success', glow: 'glow-accent', bg: 'bg-success/10' },
+    { label: 'Live Tracking', value: liveCount, icon: ShieldCheck, color: 'text-success', glow: 'glow-accent', bg: 'bg-success/10' },
   ];
 
   return (
