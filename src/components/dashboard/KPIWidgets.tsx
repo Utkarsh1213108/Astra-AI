@@ -1,16 +1,22 @@
 import { Satellite as SatIcon, AlertTriangle, ShieldCheck, Activity } from 'lucide-react';
-import { satellites, anomalyEvents } from '@/data/mockData';
 import { useLiveSatellites } from '@/hooks/useLiveSatellites';
+import { liveSatellitesToSatellites, generateAnomalyEvents } from '@/data/generatedData';
 import { motion } from 'framer-motion';
+import { useMemo } from 'react';
 
 const KPIWidgets = () => {
   const { data: livePositions } = useLiveSatellites();
-  const liveCount = livePositions?.length || 0;
 
-  const totalSats = satellites.length + liveCount;
-  const activeAnomalies = anomalyEvents.filter(a => !a.resolved).length;
-  const criticalAlerts = satellites.filter(s => s.status === 'critical').length;
-  const healthySats = satellites.filter(s => s.status === 'healthy').length + liveCount;
+  const { totalSats, activeAnomalies, criticalAlerts, liveCount } = useMemo(() => {
+    const sats = liveSatellitesToSatellites(livePositions || []);
+    const events = generateAnomalyEvents(sats);
+    return {
+      totalSats: sats.length,
+      activeAnomalies: events.filter(a => !a.resolved).length,
+      criticalAlerts: sats.filter(s => s.status === 'critical').length,
+      liveCount: sats.length,
+    };
+  }, [livePositions]);
 
   const kpis = [
     { label: 'Total Satellites', value: totalSats, icon: SatIcon, color: 'text-primary', glow: 'glow-primary', bg: 'bg-primary/10' },

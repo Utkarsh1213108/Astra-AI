@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
-import { rulPredictions } from '@/data/mockData';
+import { useLiveSatellites } from '@/hooks/useLiveSatellites';
+import { liveSatellitesToSatellites, generateRULPredictions } from '@/data/generatedData';
 import { RULPrediction } from '@/data/types';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
@@ -10,10 +11,22 @@ import { motion } from 'framer-motion';
 import { Clock, TrendingDown, AlertTriangle } from 'lucide-react';
 
 const RULForecaster = () => {
-  const [selected, setSelected] = useState<RULPrediction>(rulPredictions[0]);
+  const { data: livePositions } = useLiveSatellites();
+  const satellites = useMemo(() => liveSatellitesToSatellites(livePositions || []), [livePositions]);
+  const rulPredictions = useMemo(() => generateRULPredictions(satellites), [satellites]);
+  const [selected, setSelected] = useState<RULPrediction | null>(null);
+
+  const active = selected || rulPredictions[0];
+
+  if (!active) {
+    return (
+      <DashboardLayout>
+        <div className="p-8 text-center text-muted-foreground">Loading satellite data...</div>
+      </DashboardLayout>
+    );
+  }
 
   const healthColor = (h: number) => h >= 80 ? 'text-success' : h >= 50 ? 'text-warning' : 'text-destructive';
-  const healthBg = (h: number) => h >= 80 ? 'bg-success/10' : h >= 50 ? 'bg-warning/10' : 'bg-destructive/10';
 
   return (
     <DashboardLayout>
@@ -23,7 +36,6 @@ const RULForecaster = () => {
           <p className="text-xs text-muted-foreground">Predictive maintenance powered by deep learning degradation models</p>
         </div>
 
-        {/* Component Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {rulPredictions.map((rul, i) => (
             <motion.button
@@ -33,7 +45,7 @@ const RULForecaster = () => {
               transition={{ delay: i * 0.08 }}
               onClick={() => setSelected(rul)}
               className={`bg-card border rounded-lg p-4 text-left transition-all ${
-                selected.componentName === rul.componentName ? 'border-primary/50 glow-primary' : 'border-border hover:border-primary/20'
+                active.componentName === rul.componentName ? 'border-primary/50 glow-primary' : 'border-border hover:border-primary/20'
               }`}
             >
               <div className="text-[10px] text-muted-foreground font-display tracking-wider mb-1">{rul.subsystem}</div>
@@ -44,11 +56,9 @@ const RULForecaster = () => {
           ))}
         </div>
 
-        {/* Detailed View */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* RUL Countdown */}
           <motion.div
-            key={selected.componentName + '-countdown'}
+            key={active.componentName + '-countdown'}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="bg-card border border-border rounded-lg p-5"
@@ -58,41 +68,40 @@ const RULForecaster = () => {
               <span className="font-display text-[10px] tracking-wider text-primary">RUL COUNTDOWN</span>
             </div>
             <div className="text-center space-y-3">
-              <div className={`font-display text-5xl font-bold ${healthColor(selected.currentHealth)}`}>
-                {selected.rulDays}
+              <div className={`font-display text-5xl font-bold ${healthColor(active.currentHealth)}`}>
+                {active.rulDays}
               </div>
               <div className="text-muted-foreground text-sm">Days Remaining</div>
-              <div className={`text-xs font-heading ${healthColor(selected.currentHealth)}`}>
-                ± {selected.confidenceMargin} days confidence interval
+              <div className={`text-xs font-heading ${healthColor(active.currentHealth)}`}>
+                ± {active.confidenceMargin} days confidence interval
               </div>
               <div className="border-t border-border pt-3 mt-3 space-y-2 text-left">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Component</span>
-                  <span className="text-foreground font-heading">{selected.componentName}</span>
+                  <span className="text-foreground font-heading">{active.componentName}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Subsystem</span>
-                  <span className="text-foreground font-heading">{selected.subsystem}</span>
+                  <span className="text-foreground font-heading">{active.subsystem}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Current Health</span>
-                  <span className={`font-heading font-semibold ${healthColor(selected.currentHealth)}`}>{selected.currentHealth}%</span>
+                  <span className={`font-heading font-semibold ${healthColor(active.currentHealth)}`}>{active.currentHealth}%</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Degradation Rate</span>
-                  <span className="text-foreground font-heading">{selected.degradationRate}%/day</span>
+                  <span className="text-foreground font-heading">{active.degradationRate}%/day</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Failure Threshold</span>
-                  <span className="text-destructive font-heading">{selected.failureThreshold}%</span>
+                  <span className="text-destructive font-heading">{active.failureThreshold}%</span>
                 </div>
               </div>
             </div>
           </motion.div>
 
-          {/* Degradation Curve */}
           <motion.div
-            key={selected.componentName + '-curve'}
+            key={active.componentName + '-curve'}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="bg-card border border-border rounded-lg p-5 lg:col-span-2"
@@ -103,33 +112,17 @@ const RULForecaster = () => {
             </div>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={selected.historicalData}>
+                <ComposedChart data={active.historicalData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 20% 18%)" />
-                  <XAxis
-                    dataKey="day"
-                    tick={{ fill: 'hsl(215 16% 55%)', fontSize: 9 }}
-                    label={{ value: 'Days', position: 'bottom', fill: 'hsl(215 16% 55%)', fontSize: 10 }}
-                  />
-                  <YAxis
-                    tick={{ fill: 'hsl(215 16% 55%)', fontSize: 9 }}
-                    domain={[0, 105]}
-                    label={{ value: 'Health %', angle: -90, position: 'insideLeft', fill: 'hsl(215 16% 55%)', fontSize: 10 }}
-                  />
-                  <Tooltip
-                    contentStyle={{ background: 'hsl(220 25% 10%)', border: '1px solid hsl(220 20% 18%)', borderRadius: 8, fontSize: 11 }}
-                  />
-                  {/* Confidence interval band */}
+                  <XAxis dataKey="day" tick={{ fill: 'hsl(215 16% 55%)', fontSize: 9 }} label={{ value: 'Days', position: 'bottom', fill: 'hsl(215 16% 55%)', fontSize: 10 }} />
+                  <YAxis tick={{ fill: 'hsl(215 16% 55%)', fontSize: 9 }} domain={[0, 105]} label={{ value: 'Health %', angle: -90, position: 'insideLeft', fill: 'hsl(215 16% 55%)', fontSize: 10 }} />
+                  <Tooltip contentStyle={{ background: 'hsl(220 25% 10%)', border: '1px solid hsl(220 20% 18%)', borderRadius: 8, fontSize: 11 }} />
                   <Area type="monotone" dataKey="upper" stroke="none" fill="hsl(199 89% 48%)" fillOpacity={0.08} name="Upper CI" />
                   <Area type="monotone" dataKey="lower" stroke="none" fill="hsl(220 25% 10%)" fillOpacity={1} name="Lower CI" />
-                  {/* Actual area between lower and health for confidence */}
                   <Area type="monotone" dataKey="health" stroke="none" fill="hsl(199 89% 48%)" fillOpacity={0.1} />
-                  {/* Failure threshold */}
-                  <ReferenceLine y={selected.failureThreshold} stroke="hsl(0 72% 51%)" strokeDasharray="5 5" strokeWidth={1.5} label={{ value: 'Failure Threshold', fill: 'hsl(0 72% 51%)', fontSize: 9, position: 'right' }} />
-                  {/* Main line */}
+                  <ReferenceLine y={active.failureThreshold} stroke="hsl(0 72% 51%)" strokeDasharray="5 5" strokeWidth={1.5} label={{ value: 'Failure Threshold', fill: 'hsl(0 72% 51%)', fontSize: 9, position: 'right' }} />
                   <Line type="monotone" dataKey="health" stroke="hsl(199 89% 48%)" strokeWidth={2} dot={false} name="Health Score" />
-                  {/* Upper bound */}
                   <Line type="monotone" dataKey="upper" stroke="hsl(199 89% 48%)" strokeWidth={0.5} strokeDasharray="3 3" dot={false} name="Upper Bound" />
-                  {/* Lower bound */}
                   <Line type="monotone" dataKey="lower" stroke="hsl(199 89% 48%)" strokeWidth={0.5} strokeDasharray="3 3" dot={false} name="Lower Bound" />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -142,8 +135,7 @@ const RULForecaster = () => {
           </motion.div>
         </div>
 
-        {/* Alert if RUL is low */}
-        {selected.rulDays < 350 && (
+        {active.rulDays < 350 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -153,8 +145,8 @@ const RULForecaster = () => {
             <div>
               <div className="font-display text-xs text-warning tracking-wider">MAINTENANCE ADVISORY</div>
               <p className="text-sm text-foreground mt-1">
-                {selected.componentName} predicted failure within {selected.rulDays} ± {selected.confidenceMargin} days.
-                Schedule preventive maintenance or prepare replacement unit. Current degradation rate: {selected.degradationRate}%/day.
+                {active.componentName} predicted failure within {active.rulDays} ± {active.confidenceMargin} days.
+                Schedule preventive maintenance or prepare replacement unit. Current degradation rate: {active.degradationRate}%/day.
               </p>
             </div>
           </motion.div>
