@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
-import { anomalyEvents, satellites } from '@/data/mockData';
+import { useLiveSatellites } from '@/hooks/useLiveSatellites';
+import { liveSatellitesToSatellites, generateAnomalyEvents } from '@/data/generatedData';
 import { motion } from 'framer-motion';
 import { Filter, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -14,10 +15,14 @@ const severityColors = {
 };
 
 const AnomalyEngine = () => {
+  const { data: livePositions } = useLiveSatellites();
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
   const [filterSatellite, setFilterSatellite] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const satellites = useMemo(() => liveSatellitesToSatellites(livePositions || []), [livePositions]);
+  const anomalyEvents = useMemo(() => generateAnomalyEvents(satellites), [satellites]);
 
   const filtered = anomalyEvents.filter(e => {
     if (filterSeverity !== 'all' && e.severity !== filterSeverity) return false;
@@ -34,7 +39,6 @@ const AnomalyEngine = () => {
           <p className="text-xs text-muted-foreground">AI-powered anomaly identification with root cause analysis</p>
         </div>
 
-        {/* Filters */}
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -71,7 +75,6 @@ const AnomalyEngine = () => {
           </Select>
         </div>
 
-        {/* Anomaly Table */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -132,7 +135,6 @@ const AnomalyEngine = () => {
           </div>
         </div>
 
-        {/* Root Cause Detail Panel */}
         {expandedId && (() => {
           const event = anomalyEvents.find(e => e.id === expandedId);
           if (!event) return null;

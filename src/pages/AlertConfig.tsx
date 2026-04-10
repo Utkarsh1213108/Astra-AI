@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
-import { defaultAlertConfigs, anomalyEvents, satellites, rulPredictions } from '@/data/mockData';
+import { useLiveSatellites } from '@/hooks/useLiveSatellites';
+import { liveSatellitesToSatellites, generateAnomalyEvents, generateRULPredictions, defaultAlertConfigs } from '@/data/generatedData';
 import { AlertConfig } from '@/data/types';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
@@ -10,6 +11,11 @@ import { Settings, Download, FileText, Bell, Mail, Smartphone } from 'lucide-rea
 import { toast } from 'sonner';
 
 const AlertConfigPage = () => {
+  const { data: livePositions } = useLiveSatellites();
+  const satellites = useMemo(() => liveSatellitesToSatellites(livePositions || []), [livePositions]);
+  const anomalyEvents = useMemo(() => generateAnomalyEvents(satellites), [satellites]);
+  const rulPredictions = useMemo(() => generateRULPredictions(satellites), [satellites]);
+
   const [configs, setConfigs] = useState<AlertConfig[]>(defaultAlertConfigs);
 
   const updateConfig = (index: number, updates: Partial<AlertConfig>) => {
@@ -49,7 +55,6 @@ const AlertConfigPage = () => {
     doc.setTextColor(150, 150, 150);
     doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 30);
 
-    // Fleet Summary
     doc.setFontSize(13);
     doc.setTextColor(255, 255, 255);
     doc.text('Fleet Summary', 14, 42);
@@ -62,14 +67,13 @@ const AlertConfigPage = () => {
         s.status.toUpperCase(),
         `${Math.round(s.subsystems.reduce((a, sub) => a + sub.healthScore, 0) / s.subsystems.length)}%`,
         s.mission,
-        `${s.orbitType} ${s.altitude}km`,
+        `${s.orbitType} ${Math.round(s.altitude)}km`,
       ]),
       theme: 'grid',
       headStyles: { fillColor: [14, 165, 233], textColor: [0, 0, 0] },
       styles: { fontSize: 9 },
     });
 
-    // Active Anomalies
     const lastY = (doc as any).lastAutoTable?.finalY || 100;
     doc.text('Active Anomalies', 14, lastY + 12);
 
@@ -85,7 +89,6 @@ const AlertConfigPage = () => {
       styles: { fontSize: 9 },
     });
 
-    // RUL Predictions
     const lastY2 = (doc as any).lastAutoTable?.finalY || 160;
     doc.text('RUL Predictions', 14, lastY2 + 12);
 
@@ -112,7 +115,6 @@ const AlertConfigPage = () => {
           <p className="text-xs text-muted-foreground">Manage detection sensitivity and export operational reports</p>
         </div>
 
-        {/* Alert Threshold Settings */}
         <div className="bg-card border border-border rounded-lg p-5">
           <div className="flex items-center gap-2 mb-5">
             <Settings className="w-4 h-4 text-primary" />
@@ -129,10 +131,7 @@ const AlertConfigPage = () => {
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <Switch
-                      checked={config.enabled}
-                      onCheckedChange={v => updateConfig(i, { enabled: v })}
-                    />
+                    <Switch checked={config.enabled} onCheckedChange={v => updateConfig(i, { enabled: v })} />
                     <span className="font-heading text-sm font-semibold text-foreground">{config.subsystem}</span>
                   </div>
                   <div className="flex items-center gap-3">
@@ -155,15 +154,7 @@ const AlertConfigPage = () => {
                 <div className="flex items-center gap-4">
                   <span className="text-[10px] text-muted-foreground w-16">Sensitivity</span>
                   <div className="flex-1">
-                    <Slider
-                      value={[config.sensitivity]}
-                      onValueChange={v => updateConfig(i, { sensitivity: v[0] })}
-                      min={10}
-                      max={100}
-                      step={5}
-                      disabled={!config.enabled}
-                      className="w-full"
-                    />
+                    <Slider value={[config.sensitivity]} onValueChange={v => updateConfig(i, { sensitivity: v[0] })} min={10} max={100} step={5} disabled={!config.enabled} className="w-full" />
                   </div>
                   <span className={`font-display text-sm w-12 text-right ${
                     config.sensitivity >= 80 ? 'text-destructive' : config.sensitivity >= 50 ? 'text-warning' : 'text-success'
@@ -179,17 +170,13 @@ const AlertConfigPage = () => {
             ))}
           </div>
           <div className="mt-5 flex justify-end">
-            <Button
-              onClick={() => toast.success('Alert configurations saved')}
-              className="font-display text-xs tracking-wider bg-primary text-primary-foreground hover:bg-primary/90"
-            >
+            <Button onClick={() => toast.success('Alert configurations saved')} className="font-display text-xs tracking-wider bg-primary text-primary-foreground hover:bg-primary/90">
               <Bell className="w-3.5 h-3.5 mr-2" />
               Save Configuration
             </Button>
           </div>
         </div>
 
-        {/* Report Generation */}
         <div className="bg-card border border-border rounded-lg p-5">
           <div className="flex items-center gap-2 mb-5">
             <FileText className="w-4 h-4 text-primary" />
@@ -199,24 +186,14 @@ const AlertConfigPage = () => {
             Export the current fleet health status, recent anomalies, and RUL predictions for engineering review.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={exportCSV}
-              className="bg-secondary/30 border border-border rounded-lg p-4 text-left hover:border-primary/30 transition-colors"
-            >
+            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={exportCSV} className="bg-secondary/30 border border-border rounded-lg p-4 text-left hover:border-primary/30 transition-colors">
               <div className="flex items-center gap-2 mb-2">
                 <Download className="w-4 h-4 text-primary" />
                 <span className="font-heading text-sm font-semibold text-foreground">Export CSV</span>
               </div>
               <p className="text-[11px] text-muted-foreground">Raw data export for spreadsheet analysis. Includes all subsystem health scores and anomaly counts.</p>
             </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={exportPDF}
-              className="bg-secondary/30 border border-border rounded-lg p-4 text-left hover:border-primary/30 transition-colors"
-            >
+            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={exportPDF} className="bg-secondary/30 border border-border rounded-lg p-4 text-left hover:border-primary/30 transition-colors">
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="w-4 h-4 text-primary" />
                 <span className="font-heading text-sm font-semibold text-foreground">Export PDF Report</span>

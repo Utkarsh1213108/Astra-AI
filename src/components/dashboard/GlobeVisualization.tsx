@@ -3,8 +3,7 @@ import { Canvas, useFrame, extend } from '@react-three/fiber';
 import { OrbitControls, Sphere, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useNavigate } from 'react-router-dom';
-import { useLiveSatellites, LiveSatellitePosition } from '@/hooks/useLiveSatellites';
-import { satellites as mockSatellites } from '@/data/mockData';
+import { useLiveSatellites } from '@/hooks/useLiveSatellites';
 
 extend({ Line_: THREE.Line });
 
@@ -70,8 +69,8 @@ function Globe() {
   );
 }
 
-function SatelliteMarker({ lat, lng, name, id, isLive }: {
-  lat: number; lng: number; name: string; id: string; isLive: boolean;
+function SatelliteMarker({ lat, lng, name, id }: {
+  lat: number; lng: number; name: string; id: string;
 }) {
   const navigate = useNavigate();
   const meshRef = useRef<THREE.Mesh>(null);
@@ -86,8 +85,6 @@ function SatelliteMarker({ lat, lng, name, id, isLive }: {
       r * Math.sin(phi) * Math.sin(theta),
     ];
   }, [lat, lng]);
-
-  const color = isLive ? '#22c55e' : '#6366f1';
 
   useFrame(({ clock }) => {
     if (meshRef.current) {
@@ -105,13 +102,13 @@ function SatelliteMarker({ lat, lng, name, id, isLive }: {
         onPointerOut={() => { document.body.style.cursor = 'default'; }}
       >
         <octahedronGeometry args={[0.06, 0]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
+        <meshStandardMaterial color="#22c55e" emissive="#22c55e" emissiveIntensity={0.8} />
       </mesh>
-      <pointLight color={color} intensity={0.5} distance={0.5} />
+      <pointLight color="#22c55e" intensity={0.5} distance={0.5} />
       <Html distanceFactor={8} style={{ pointerEvents: 'none' }}>
         <div className="bg-card/90 border border-border rounded px-2 py-1 whitespace-nowrap backdrop-blur-sm">
           <span className="font-display text-[8px] text-foreground">{name}</span>
-          {isLive && <span className="ml-1 text-[7px] text-success">● LIVE</span>}
+          <span className="ml-1 text-[7px] text-success">● LIVE</span>
         </div>
       </Html>
     </group>
@@ -119,36 +116,15 @@ function SatelliteMarker({ lat, lng, name, id, isLive }: {
 }
 
 function SceneContent() {
-  const { data: livePositions, isLoading } = useLiveSatellites();
+  const { data: livePositions } = useLiveSatellites();
 
-  // Merge live and mock: live takes priority
   const markers = useMemo(() => {
-    const items: { lat: number; lng: number; name: string; id: string; isLive: boolean }[] = [];
-
-    if (livePositions && livePositions.length > 0) {
-      livePositions.forEach((pos) => {
-        items.push({
-          lat: pos.lat,
-          lng: pos.lng,
-          name: pos.name,
-          id: `norad-${pos.noradId}`,
-          isLive: true,
-        });
-      });
-    }
-
-    // Add mock satellites that don't overlap with live data
-    mockSatellites.forEach((sat) => {
-      items.push({
-        lat: sat.lat,
-        lng: sat.lng,
-        name: sat.name,
-        id: sat.id,
-        isLive: false,
-      });
-    });
-
-    return items;
+    return (livePositions || []).map((pos) => ({
+      lat: pos.lat,
+      lng: pos.lng,
+      name: pos.name,
+      id: `norad-${pos.noradId}`,
+    }));
   }, [livePositions]);
 
   return (
@@ -164,7 +140,6 @@ function SceneContent() {
           lng={m.lng}
           name={m.name}
           id={m.id}
-          isLive={m.isLive}
         />
       ))}
       <OrbitControls enableZoom enablePan={false} autoRotate autoRotateSpeed={0.3} minDistance={3.5} maxDistance={8} />

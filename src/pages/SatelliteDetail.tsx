@@ -1,7 +1,8 @@
 import { useParams, Link } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
-import { satellites, generateTelemetryStream } from '@/data/mockData';
+import { useLiveSatellites } from '@/hooks/useLiveSatellites';
+import { liveSatellitesToSatellites, generateTelemetryStream } from '@/data/generatedData';
 import { TelemetryPoint } from '@/data/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -20,13 +21,14 @@ const subsystemIcons: Record<string, typeof Activity> = {
 
 const SatelliteDetail = () => {
   const { id } = useParams<{ id: string }>();
+  const { data: livePositions } = useLiveSatellites();
+  const satellites = useMemo(() => liveSatellitesToSatellites(livePositions || []), [livePositions]);
   const sat = satellites.find(s => s.id === id);
   const [activeSubsystem, setActiveSubsystem] = useState('power');
   const [telemetryData, setTelemetryData] = useState<Record<string, TelemetryPoint[]>>({});
 
   const subsystem = sat?.subsystems.find(s => s.key === activeSubsystem);
 
-  // Generate telemetry data for each sensor
   useEffect(() => {
     if (!subsystem) return;
     const data: Record<string, TelemetryPoint[]> = {};
@@ -39,7 +41,6 @@ const SatelliteDetail = () => {
     setTelemetryData(data);
   }, [subsystem, activeSubsystem, sat]);
 
-  // Live update
   useEffect(() => {
     const interval = setInterval(() => {
       setTelemetryData(prev => {
@@ -69,7 +70,7 @@ const SatelliteDetail = () => {
     return (
       <DashboardLayout>
         <div className="p-8 text-center">
-          <p className="text-muted-foreground">Satellite not found.</p>
+          <p className="text-muted-foreground">Satellite not found. Waiting for live data...</p>
           <Link to="/dashboard" className="text-primary underline text-sm">Back to Command Center</Link>
         </div>
       </DashboardLayout>
@@ -81,7 +82,6 @@ const SatelliteDetail = () => {
   return (
     <DashboardLayout>
       <div className="p-4 space-y-4">
-        {/* Header */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link to="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
@@ -89,7 +89,7 @@ const SatelliteDetail = () => {
             </Link>
             <div>
               <h1 className="font-display text-lg text-foreground">{sat.name}</h1>
-              <p className="text-[11px] text-muted-foreground">{sat.mission} · {sat.orbitType} · {sat.altitude}km · NORAD {sat.noradId}</p>
+              <p className="text-[11px] text-muted-foreground">{sat.mission} · {sat.orbitType} · {Math.round(sat.altitude)}km · NORAD {sat.noradId}</p>
             </div>
           </div>
           <span className={`font-display text-xs tracking-wider uppercase ${statusColor}`}>
@@ -97,7 +97,6 @@ const SatelliteDetail = () => {
           </span>
         </motion.div>
 
-        {/* Subsystem Health Overview */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {sat.subsystems.map(sub => {
             const Icon = subsystemIcons[sub.key] || Activity;
@@ -125,7 +124,6 @@ const SatelliteDetail = () => {
           })}
         </div>
 
-        {/* Telemetry Charts */}
         <Tabs value={activeSubsystem} onValueChange={setActiveSubsystem}>
           <TabsList className="bg-card border border-border">
             {sat.subsystems.map(sub => (
@@ -170,14 +168,10 @@ const SatelliteDetail = () => {
                             contentStyle={{ background: 'hsl(220 25% 10%)', border: '1px solid hsl(220 20% 18%)', borderRadius: 8, fontSize: 11 }}
                             labelStyle={{ color: 'hsl(215 16% 55%)' }}
                           />
-                          {/* Normal range band */}
                           <ReferenceArea y1={sensor.normalMin} y2={sensor.normalMax} fill="hsl(150 80% 45%)" fillOpacity={0.05} />
-                          {/* Critical thresholds */}
                           <ReferenceLine y={sensor.criticalMax} stroke="hsl(0 72% 51%)" strokeDasharray="3 3" strokeOpacity={0.5} />
                           <ReferenceLine y={sensor.criticalMin} stroke="hsl(0 72% 51%)" strokeDasharray="3 3" strokeOpacity={0.5} />
-                          {/* Baseline */}
                           <Line type="monotone" dataKey="baseline" stroke="hsl(215 16% 55%)" strokeWidth={1} strokeDasharray="4 4" dot={false} name="Expected" />
-                          {/* Live data */}
                           <Line
                             type="monotone"
                             dataKey="value"
@@ -192,7 +186,6 @@ const SatelliteDetail = () => {
                             }}
                             name="Live"
                           />
-                          {/* Anomaly markers */}
                           {anomalyPoints.map((_, idx) => {
                             const dataIdx = data.findIndex(d => d.anomaly && data.filter((dd, ii) => dd.anomaly && ii <= data.indexOf(d)).length === idx + 1);
                             if (dataIdx >= 0) {

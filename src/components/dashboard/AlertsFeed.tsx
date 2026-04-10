@@ -1,5 +1,7 @@
-import { anomalyEvents } from '@/data/mockData';
+import { useLiveSatellites } from '@/hooks/useLiveSatellites';
+import { liveSatellitesToSatellites, generateAnomalyEvents } from '@/data/generatedData';
 import { motion } from 'framer-motion';
+import { useMemo } from 'react';
 
 const severityColors = {
   low: 'text-muted-foreground',
@@ -9,9 +11,15 @@ const severityColors = {
 };
 
 const AlertsFeed = () => {
-  const sorted = [...anomalyEvents].sort((a, b) =>
-    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
+  const { data: livePositions } = useLiveSatellites();
+
+  const sorted = useMemo(() => {
+    const sats = liveSatellitesToSatellites(livePositions || []);
+    const events = generateAnomalyEvents(sats);
+    return [...events].sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }, [livePositions]);
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -20,6 +28,9 @@ const AlertsFeed = () => {
         <span className="text-[10px] text-muted-foreground">{sorted.length} events</span>
       </div>
       <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
+        {sorted.length === 0 && (
+          <div className="px-4 py-6 text-center text-sm text-muted-foreground">No anomalies detected</div>
+        )}
         {sorted.map((event, i) => (
           <motion.div
             key={event.id}
