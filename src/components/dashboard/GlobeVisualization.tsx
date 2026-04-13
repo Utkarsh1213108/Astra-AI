@@ -1,11 +1,29 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useState } from 'react';
 import { Canvas, useFrame, extend } from '@react-three/fiber';
 import { OrbitControls, Sphere, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useNavigate } from 'react-router-dom';
-import { useLiveSatellites } from '@/hooks/useLiveSatellites';
+import { useLiveSatellites, useOrbitTrail } from '@/hooks/useLiveSatellites';
 
 extend({ Line_: THREE.Line });
+
+function latLngToVec3(lat: number, lng: number, r: number): [number, number, number] {
+  const phi = (90 - lat) * (Math.PI / 180);
+  const theta = (lng + 180) * (Math.PI / 180);
+  return [
+    -r * Math.sin(phi) * Math.cos(theta),
+    r * Math.cos(phi),
+    r * Math.sin(phi) * Math.sin(theta),
+  ];
+}
+
+const categoryColors: Record<string, string> = {
+  station: '#f59e0b',
+  science: '#8b5cf6',
+  cubesat: '#22c55e',
+  starlink: '#06b6d4',
+  weather: '#ec4899',
+};
 
 function Globe() {
   const groupRef = useRef<THREE.Group>(null);
@@ -69,21 +87,37 @@ function Globe() {
   );
 }
 
-function SatelliteMarker({ lat, lng, name, id }: {
-  lat: number; lng: number; name: string; id: string;
+function OrbitTrail({ noradId, color }: { noradId: number; color: string }) {
+  const { data: trail } = useOrbitTrail(noradId);
+
+  const lineObj = useMemo(() => {
+    if (!trail || trail.length < 2) return null;
+    const points = trail.map(p => {
+      const [x, y, z] = latLngToVec3(p.lat, p.lng, 2.3);
+      return new THREE.Vector3(x, y, z);
+    });
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
+      color,
+      opacity: 0.4,
+      transparent: true,
+    });
+    return new THREE.Line(geometry, material);
+  }, [trail, color]);
+
+  if (!lineObj) return null;
+  return <primitive object={lineObj} />;
+}
+
+function SatelliteMarker({ lat, lng, name, id, color, category }: {
+  lat: number; lng: number; name: string; id: string; color: string; category?: string;
 }) {
   const navigate = useNavigate();
   const meshRef = useRef<THREE.Mesh>(null);
+  const [hovered, setHovered] = useState(false);
 
   const position = useMemo((): [number, number, number] => {
-    const phi = (90 - lat) * (Math.PI / 180);
-    const theta = (lng + 180) * (Math.PI / 180);
-    const r = 2.3;
-    return [
-      -r * Math.sin(phi) * Math.cos(theta),
-      r * Math.cos(phi),
-      r * Math.sin(phi) * Math.sin(theta),
-    ];
+    return latLngToVec3(lat, lng, 2.3);
   }, [lat, lng]);
 
   useFrame(({ clock }) => {
@@ -93,24 +127,28 @@ function SatelliteMarker({ lat, lng, name, id }: {
     }
   });
 
+  const categoryLabel = category ? category.toUpperCase() : 'SAT';
+
   return (
     <group position={position}>
       <mesh
         ref={meshRef}
         onClick={() => navigate(`/satellite/${id}`)}
-        onPointerOver={() => { document.body.style.cursor = 'pointer'; }}
-        onPointerOut={() => { document.body.style.cursor = 'default'; }}
+        onPointerOver={() => { document.body.style.cursor = 'pointer'; setHovered(true); }}
+        onPointerOut={() => { document.body.style.cursor = 'default'; setHovered(false); }}
       >
         <octahedronGeometry args={[0.06, 0]} />
-        <meshStandardMaterial color="#22c55e" emissive="#22c55e" emissiveIntensity={0.8} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
       </mesh>
-      <pointLight color="#22c55e" intensity={0.5} distance={0.5} />
-      <Html distanceFactor={8} style={{ pointerEvents: 'none' }}>
-        <div className="bg-card/90 border border-border rounded px-2 py-1 whitespace-nowrap backdrop-blur-sm">
-          <span className="font-display text-[8px] text-foreground">{name}</span>
-          <span className="ml-1 text-[7px] text-success">● LIVE</span>
-        </div>
-      </Html>
+      <pointLight color={color} intensity={0.5} distance={0.5} />
+      {hovered && (
+        <Html distanceFactor={8} style={{ pointerEvents: 'none' }}>
+          <div className="bg-card/90 border border-border rounded px-2 py-1 whitespace-nowrap backdrop-blur-sm">
+            <span className="font-display text-[8px] text-foreground">{name}</span>
+            <span className="ml-1 text-[7px]" style={{ color }}>● {categoryLabel}</span>
+          </div>
+        </Html>
+      )}
     </group>
   );
 }
@@ -124,8 +162,14 @@ function SceneContent() {
       lng: pos.lng,
       name: pos.name,
       id: `norad-${pos.noradId}`,
+      noradId: pos.noradId,
+      color: categoryColors[pos.category || 'cubesat'] || '#22c55e',
+      category: pos.category,
     }));
   }, [livePositions]);
+
+  // Show orbit trails for first few satellites to avoid too many API calls
+  const trailSatellites = useMemo(() => markers.slice(0, 4), [markers]);
 
   return (
     <>
@@ -133,6 +177,13 @@ function SceneContent() {
       <directionalLight position={[5, 3, 5]} intensity={0.8} color="#0ea5e9" />
       <directionalLight position={[-5, -3, -5]} intensity={0.3} color="#6366f1" />
       <Globe />
+      {trailSatellites.map((m) => (
+        <OrbitTrail
+          key={`trail-${m.noradId}`}
+          noradId={m.noradId}
+          color={m.color}
+        />
+      ))}
       {markers.map((m, i) => (
         <SatelliteMarker
           key={`${m.id}-${i}`}
@@ -140,6 +191,8 @@ function SceneContent() {
           lng={m.lng}
           name={m.name}
           id={m.id}
+          color={m.color}
+          category={m.category}
         />
       ))}
       <OrbitControls enableZoom enablePan={false} autoRotate autoRotateSpeed={0.3} minDistance={3.5} maxDistance={8} />
@@ -151,6 +204,15 @@ const GlobeVisualization = () => {
   const { data: livePositions } = useLiveSatellites();
   const liveCount = livePositions?.length || 0;
 
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    (livePositions || []).forEach(p => {
+      const cat = p.category || 'other';
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return counts;
+  }, [livePositions]);
+
   return (
     <div className="w-full h-full relative">
       <Canvas camera={{ position: [0, 2, 5], fov: 45 }} gl={{ antialias: true }}>
@@ -159,10 +221,22 @@ const GlobeVisualization = () => {
       <div className="absolute top-2 left-2 bg-card/80 backdrop-blur-sm border border-border rounded-lg px-3 py-2">
         <span className="font-display text-[10px] tracking-wider text-primary">ORBITAL MAP — LIVE</span>
         {liveCount > 0 && (
-          <span className="ml-2 text-[9px] text-success font-display">
-            {liveCount} LIVE TRACKED
-          </span>
+          <div className="flex gap-2 mt-1 flex-wrap">
+            {Object.entries(categoryCounts).map(([cat, count]) => (
+              <span key={cat} className="text-[8px] font-display" style={{ color: categoryColors[cat] || '#22c55e' }}>
+                {count} {cat.toUpperCase()}
+              </span>
+            ))}
+          </div>
         )}
+      </div>
+      <div className="absolute bottom-2 right-2 bg-card/80 backdrop-blur-sm border border-border rounded-lg px-2 py-1.5 flex flex-col gap-0.5">
+        {Object.entries(categoryColors).map(([cat, color]) => (
+          <div key={cat} className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+            <span className="text-[7px] font-display text-muted-foreground">{cat.toUpperCase()}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
