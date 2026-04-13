@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
-import { useLiveSatellites } from '@/hooks/useLiveSatellites';
+import { useLiveSatellites, useSatnogsData } from '@/hooks/useLiveSatellites';
 import { liveSatellitesToSatellites, generateTelemetryStream } from '@/data/generatedData';
 import { TelemetryPoint } from '@/data/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,7 +10,7 @@ import {
   Area, ComposedChart, ReferenceLine, ReferenceArea, Tooltip,
 } from 'recharts';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Activity, Thermometer, Radio, RotateCw } from 'lucide-react';
+import { ArrowLeft, Activity, Thermometer, Radio, RotateCw, Loader2, Satellite } from 'lucide-react';
 
 const subsystemIcons: Record<string, typeof Activity> = {
   power: Activity,
@@ -21,13 +21,57 @@ const subsystemIcons: Record<string, typeof Activity> = {
 
 const SatelliteDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const { data: livePositions } = useLiveSatellites();
+  const { data: livePositions, isLoading } = useLiveSatellites();
   const satellites = useMemo(() => liveSatellitesToSatellites(livePositions || []), [livePositions]);
-  const sat = satellites.find(s => s.id === id);
+  
+  // Normalize ID: support both "norad-25544" and raw number formats
+  const sat = useMemo(() => {
+    if (!id || !satellites.length) return null;
+    // Direct match
+    const direct = satellites.find(s => s.id === id);
+    if (direct) return direct;
+    // Try matching by norad ID only (strip prefix)
+    const numericId = id.replace(/^norad-/, '');
+    return satellites.find(s => s.noradId === numericId || s.id === `norad-${numericId}`);
+  }, [id, satellites]);
+
+  const noradIdNum = sat ? parseInt(sat.noradId) : null;
+  const { data: satnogsData } = useSatnogsData(noradIdNum);
+
   const [activeSubsystem, setActiveSubsystem] = useState('power');
   const [telemetryData, setTelemetryData] = useState<Record<string, TelemetryPoint[]>>({});
 
   const subsystem = sat?.subsystems.find(s => s.key === activeSubsystem);
+
+  // Enrich comms sensors with SatNOGS transmitter data
+  const enrichedSubsystems = useMemo(() => {
+    if (!sat) return [];
+    return sat.subsystems.map(sub => {
+      if (sub.key === 'comms' && satnogsData?.transmitters?.length) {
+        const txs = satnogsData.transmitters;
+        const aliveCount = txs.filter((t: any) => t.alive).length;
+        const totalCount = txs.length;
+        const healthFromTx = totalCount > 0 ? Math.round((aliveCount / totalCount) * 100) : sub.healthScore;
+        
+        const txSensors = txs.slice(0, 3).map((tx: any) => ({
+          name: tx.description || 'Transmitter',
+          unit: 'MHz',
+          currentValue: tx.downlink_low ? parseFloat((tx.downlink_low / 1e6).toFixed(3)) : 0,
+          normalMin: tx.downlink_low ? parseFloat(((tx.downlink_low - 1e6) / 1e6).toFixed(3)) : 0,
+          normalMax: tx.downlink_high ? parseFloat(((tx.downlink_high + 1e6) / 1e6).toFixed(3)) : 1000,
+          criticalMin: 0,
+          criticalMax: 50000,
+        }));
+
+        return {
+          ...sub,
+          healthScore: healthFromTx,
+          sensors: txSensors.length > 0 ? txSensors : sub.sensors,
+        };
+      }
+      return sub;
+    });
+  }, [sat, satnogsData]);
 
   useEffect(() => {
     if (!subsystem) return;
@@ -66,11 +110,24 @@ const SatelliteDetail = () => {
     return () => clearInterval(interval);
   }, []);
 
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="p-8 flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          <p className="text-muted-foreground text-sm">Loading satellite telemetry...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   if (!sat) {
     return (
       <DashboardLayout>
-        <div className="p-8 text-center">
-          <p className="text-muted-foreground">Satellite not found. Waiting for live data...</p>
+        <div className="p-8 text-center space-y-3">
+          <Satellite className="w-10 h-10 text-muted-foreground mx-auto" />
+          <p className="text-muted-foreground">Satellite "{id}" not found in live tracking data.</p>
+          <p className="text-xs text-muted-foreground">This may be a satellite that is no longer being tracked or the ID format has changed.</p>
           <Link to="/dashboard" className="text-primary underline text-sm">Back to Command Center</Link>
         </div>
       </DashboardLayout>
@@ -89,7 +146,12 @@ const SatelliteDetail = () => {
             </Link>
             <div>
               <h1 className="font-display text-lg text-foreground">{sat.name}</h1>
-              <p className="text-[11px] text-muted-foreground">{sat.mission} · {sat.orbitType} · {Math.round(sat.altitude)}km · NORAD {sat.noradId}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {satnogsData?.metadata?.status || sat.mission} · {sat.orbitType} · {Math.round(sat.altitude)}km · NORAD {sat.noradId}
+              </p>
+              {satnogsData?.metadata?.launched && (
+                <p className="text-[10px] text-muted-foreground">Launched: {satnogsData.metadata.launched}</p>
+              )}
             </div>
           </div>
           <span className={`font-display text-xs tracking-wider uppercase ${statusColor}`}>
@@ -97,8 +159,22 @@ const SatelliteDetail = () => {
           </span>
         </motion.div>
 
+        {/* SatNOGS transmitter summary */}
+        {satnogsData?.transmitters && satnogsData.transmitters.length > 0 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-card border border-border rounded-lg p-3">
+            <span className="font-display text-[10px] tracking-wider text-primary">SATNOGS TRANSMITTERS</span>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {satnogsData.transmitters.slice(0, 6).map((tx: any, i: number) => (
+                <div key={tx.uuid || i} className={`text-[10px] px-2 py-1 rounded border ${tx.alive ? 'border-success/30 text-success bg-success/5' : 'border-muted text-muted-foreground bg-muted/5'}`}>
+                  {tx.description || 'TX'} · {tx.downlink_low ? (tx.downlink_low / 1e6).toFixed(1) + ' MHz' : 'N/A'} · {tx.alive ? 'ACTIVE' : 'INACTIVE'}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {sat.subsystems.map(sub => {
+          {enrichedSubsystems.map(sub => {
             const Icon = subsystemIcons[sub.key] || Activity;
             const sc = sub.status === 'critical' ? 'border-destructive/30 text-destructive' : sub.status === 'warning' ? 'border-warning/30 text-warning' : 'border-success/30 text-success';
             return (
@@ -126,13 +202,13 @@ const SatelliteDetail = () => {
 
         <Tabs value={activeSubsystem} onValueChange={setActiveSubsystem}>
           <TabsList className="bg-card border border-border">
-            {sat.subsystems.map(sub => (
+            {enrichedSubsystems.map(sub => (
               <TabsTrigger key={sub.key} value={sub.key} className="font-display text-[10px] tracking-wider data-[state=active]:bg-primary/10 data-[state=active]:text-primary">
                 {sub.name}
               </TabsTrigger>
             ))}
           </TabsList>
-          {sat.subsystems.map(sub => (
+          {enrichedSubsystems.map(sub => (
             <TabsContent key={sub.key} value={sub.key} className="space-y-4 mt-4">
               {sub.sensors.map(sensor => {
                 const data = telemetryData[sensor.name] || [];
