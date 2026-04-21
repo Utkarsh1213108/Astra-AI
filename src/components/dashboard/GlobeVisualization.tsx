@@ -141,14 +141,14 @@ function SatelliteMarker({ lat, lng, name, id, color, category }: {
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
       </mesh>
       <pointLight color={color} intensity={0.5} distance={0.5} />
-      {hovered && (
-        <Html distanceFactor={8} style={{ pointerEvents: 'none' }}>
-          <div className="bg-card/90 border border-border rounded px-2 py-1 whitespace-nowrap backdrop-blur-sm">
-            <span className="font-display text-[8px] text-foreground">{name}</span>
-            <span className="ml-1 text-[7px]" style={{ color }}>● {categoryLabel}</span>
-          </div>
-        </Html>
-      )}
+      <Html distanceFactor={10} style={{ pointerEvents: 'none' }} position={[0, 0.12, 0]} center>
+        <div className={`border rounded px-1.5 py-0.5 whitespace-nowrap backdrop-blur-sm transition-all ${hovered ? 'bg-card/95 border-primary/50 scale-110' : 'bg-card/70 border-border/60'}`}>
+          <span className="font-display text-[9px] text-foreground">{name}</span>
+          {hovered && (
+            <span className="ml-1 text-[8px]" style={{ color }}>● {categoryLabel}</span>
+          )}
+        </div>
+      </Html>
     </group>
   );
 }

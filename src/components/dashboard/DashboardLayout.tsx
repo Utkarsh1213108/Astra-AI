@@ -1,16 +1,19 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Rocket, LayoutDashboard, Satellite, AlertTriangle, TrendingDown, Settings } from 'lucide-react';
-
-const navItems = [
-  { path: '/dashboard', label: 'Command Center', icon: LayoutDashboard },
-  { path: '/satellite/sat-312', label: 'Telemetry', icon: Satellite },
-  { path: '/anomalies', label: 'Anomaly Engine', icon: AlertTriangle },
-  { path: '/rul', label: 'RUL Forecaster', icon: TrendingDown },
-  { path: '/alerts', label: 'Alert Config', icon: Settings },
-];
+import { useLiveSatellites } from '@/hooks/useLiveSatellites';
 
 const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
+  const { data: livePositions } = useLiveSatellites();
+  const firstNoradId = livePositions?.[0]?.noradId ?? 25544;
+
+  const navItems = [
+    { path: '/dashboard', label: 'Command Center', icon: LayoutDashboard },
+    { path: `/satellite/norad-${firstNoradId}`, label: 'Telemetry', icon: Satellite },
+    { path: '/anomalies', label: 'Anomaly Engine', icon: AlertTriangle },
+    { path: '/rul', label: 'RUL Forecaster', icon: TrendingDown },
+    { path: '/alerts', label: 'Alert Config', icon: Settings },
+  ];
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
