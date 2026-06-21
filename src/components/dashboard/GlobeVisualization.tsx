@@ -221,33 +221,46 @@ function SatelliteMarker({
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
 
+      {/* soft outer glow */}
+      <mesh>
+        <sphereGeometry args={[0.14, 24, 24]} />
+        <meshBasicMaterial color={color} transparent opacity={0.18} depthWrite={false} />
+      </mesh>
+      {/* inner bright core */}
+      <mesh>
+        <sphereGeometry args={[0.075, 24, 24]} />
+        <meshBasicMaterial color={color} transparent opacity={0.55} depthWrite={false} />
+      </mesh>
       <mesh ref={meshRef}>
-        <octahedronGeometry args={[0.038, 0]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.4} />
+        <octahedronGeometry args={[0.09, 0]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={2.2} toneMapped={false} />
       </mesh>
 
-      {telemetry.status !== 'healthy' && (
-        <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.055, 0.085, 32]} />
-          <meshBasicMaterial color={color} transparent opacity={0.6} side={THREE.DoubleSide} />
-        </mesh>
-      )}
+      <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.13, 0.18, 48]} />
+        <meshBasicMaterial color={color} transparent opacity={0.55} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
 
       {isSelected && (
         <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.11, 0.13, 48]} />
-          <meshBasicMaterial color="#0ea5e9" transparent opacity={0.9} side={THREE.DoubleSide} />
+          <ringGeometry args={[0.22, 0.25, 64]} />
+          <meshBasicMaterial color="#0ea5e9" transparent opacity={0.95} side={THREE.DoubleSide} />
         </mesh>
       )}
 
       {hovered && (
-        <Html distanceFactor={8} style={{ pointerEvents: 'none' }} position={[0, 0.14, 0]} center>
-          <div className="bg-card/95 border border-primary/60 rounded px-2 py-1 whitespace-nowrap backdrop-blur-md shadow-lg shadow-primary/20 animate-fade-in">
-            <div className="font-display text-[10px] text-foreground leading-tight">{pos.name}</div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
-              <span className="text-[8px] font-display uppercase" style={{ color }}>{statusLabels[telemetry.status]}</span>
-              <span className="text-[8px] font-display text-muted-foreground">· RISK {telemetry.aiRiskScore}</span>
+        <Html distanceFactor={6} style={{ pointerEvents: 'none' }} position={[0, 0.28, 0]} center>
+          <div className="bg-card/95 border rounded-md px-2.5 py-1.5 whitespace-nowrap backdrop-blur-md shadow-xl animate-fade-in"
+               style={{ borderColor: color, boxShadow: `0 0 12px ${color}55` }}>
+            <div className="font-display text-[11px] text-foreground leading-tight">{pos.name}</div>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}` }} />
+              <span className="text-[9px] font-display uppercase tracking-wider" style={{ color }}>{statusLabels[telemetry.status]}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mt-1.5 text-[9px] font-mono">
+              <div><div className="text-muted-foreground">HEALTH</div><div className="text-foreground">{100 - telemetry.aiRiskScore}</div></div>
+              <div><div className="text-muted-foreground">RISK</div><div style={{ color }}>{telemetry.aiRiskScore}</div></div>
+              <div><div className="text-muted-foreground">ALT</div><div className="text-foreground">{Math.round(telemetry.altitude)}km</div></div>
             </div>
           </div>
         </Html>
