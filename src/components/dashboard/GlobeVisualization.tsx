@@ -323,42 +323,26 @@ function DebrisField() {
 }
 
 function SceneContent({
-  selectedId, setSelectedId, showTrails, showHeatmap, showDebris,
+  selectedId, setSelectedId,
 }: {
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
-  showTrails: boolean;
-  showHeatmap: boolean;
-  showDebris: boolean;
 }) {
   const { data: livePositions } = useLiveSatellites();
 
   const enriched = useMemo(() => {
-    return (livePositions || []).map(pos => {
+    return (livePositions || []).slice(0, 10).map(pos => {
       const telemetry = computeTelemetry(pos);
       return { pos, telemetry, id: `norad-${pos.noradId}` };
     });
   }, [livePositions]);
 
-  const trailTargets = useMemo(() => enriched.slice(0, 6), [enriched]);
-  const heatmapEntries = useMemo(
-    () => enriched.map(e => ({
-      lat: e.pos.lat,
-      lng: e.pos.lng,
-      color: statusColors[e.telemetry.status],
-      intensity: e.telemetry.aiRiskScore / 100,
-    })),
-    [enriched],
-  );
-
   return (
     <>
       <Sunlight />
-      <Stars radius={50} depth={30} count={3500} factor={3} saturation={0} fade speed={0.4} />
+      <Stars radius={60} depth={40} count={2500} factor={3} saturation={0} fade speed={0.3} />
       <Earth />
-      {showHeatmap && <RiskHeatmap entries={heatmapEntries} />}
-      {showDebris && <DebrisField />}
-      {showTrails && trailTargets.map(e => (
+      {enriched.map(e => (
         <OrbitTrail
           key={`trail-${e.pos.noradId}`}
           noradId={e.pos.noradId}
@@ -374,7 +358,7 @@ function SceneContent({
           isSelected={selectedId === e.id}
         />
       ))}
-      <OrbitControls enableZoom enablePan={false} autoRotate autoRotateSpeed={0.2} minDistance={3.2} maxDistance={8} />
+      <OrbitControls enableZoom enablePan={false} autoRotate autoRotateSpeed={0.25} minDistance={2.6} maxDistance={6} />
     </>
   );
 }
