@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { useNavigate } from 'react-router-dom';
 import { useLiveSatellites, useOrbitTrail, LiveSatellitePosition } from '@/hooks/useLiveSatellites';
 import earthTexture from '@/assets/earth-texture.jpg';
-import { X, Battery, Thermometer, Mountain, Brain, AlertTriangle, ExternalLink, Sun, Radio, Activity, Layers, Orbit } from 'lucide-react';
+import { X, Battery, Thermometer, Mountain, Brain, AlertTriangle, ExternalLink, Radio, Activity, Sparkles, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 /* ───────────────────────── helpers ───────────────────────── */
@@ -136,17 +136,18 @@ function Earth() {
       <Sphere args={[2, 128, 128]}>
         <meshPhongMaterial
           map={texture}
-          specular={new THREE.Color('#1a3a5a')}
-          shininess={18}
-          emissive={new THREE.Color('#06122a')}
-          emissiveIntensity={0.22}
+          specular={new THREE.Color('#2a5a8a')}
+          shininess={22}
+          emissive={new THREE.Color('#ffffff')}
+          emissiveMap={texture}
+          emissiveIntensity={0.55}
         />
       </Sphere>
       <Sphere args={[2.085, 64, 64]}>
-        <meshBasicMaterial color="#3b82f6" transparent opacity={0.09} side={THREE.BackSide} />
+        <meshBasicMaterial color="#3b82f6" transparent opacity={0.12} side={THREE.BackSide} />
       </Sphere>
       <Sphere args={[2.16, 64, 64]}>
-        <meshBasicMaterial color="#0ea5e9" transparent opacity={0.04} side={THREE.BackSide} />
+        <meshBasicMaterial color="#0ea5e9" transparent opacity={0.06} side={THREE.BackSide} />
       </Sphere>
     </group>
   );
@@ -157,13 +158,9 @@ function Sunlight() {
   const [x, y, z] = useMemo(() => latLngToVec3(subsolarLat(), subsolarLng(), 12), []);
   return (
     <>
-      <directionalLight position={[x, y, z]} intensity={1.4} color="#fff4d6" castShadow={false} />
-      <ambientLight intensity={0.22} color="#1e2a44" />
-      <pointLight position={[x * 1.4, y * 1.4, z * 1.4]} intensity={0.7} color="#ffd27a" distance={40} />
-      <mesh position={[x * 1.5, y * 1.5, z * 1.5]}>
-        <sphereGeometry args={[0.45, 32, 32]} />
-        <meshBasicMaterial color="#fff0b3" />
-      </mesh>
+      <directionalLight position={[x, y, z]} intensity={2.0} color="#fff4d6" castShadow={false} />
+      <ambientLight intensity={0.65} color="#b8c8e0" />
+      <pointLight position={[x * 1.4, y * 1.4, z * 1.4]} intensity={1.0} color="#ffd27a" distance={40} />
     </>
   );
 }
