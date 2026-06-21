@@ -513,7 +513,7 @@ const GlobeVisualization = () => {
 
   return (
     <div className="w-full h-full relative bg-[#020617]">
-      <Canvas camera={{ position: [0, 0.8, 4.2], fov: 42 }} gl={{ antialias: true, alpha: false }} dpr={[1, 2]}>
+      <Canvas camera={{ position: [1.6, 0.4, 5.5], fov: 40 }} gl={{ antialias: true, alpha: false }} dpr={[1, 2]}>
         <color attach="background" args={['#020617']} />
         <SceneContent selectedId={selectedId} setSelectedId={setSelectedId} />
       </Canvas>
