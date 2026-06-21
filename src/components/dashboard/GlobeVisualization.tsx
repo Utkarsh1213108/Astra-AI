@@ -487,22 +487,8 @@ const LegendPill = ({ color, label }: { color: string; label: string }) => (
 const GlobeVisualization = () => {
   const { data: livePositions } = useLiveSatellites();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showTrails, setShowTrails] = useState(true);
-  const [showHeatmap, setShowHeatmap] = useState(false);
-  const [showDebris, setShowDebris] = useState(true);
-  const [solarFlux, setSolarFlux] = useState(118); // Kp/F10.7 simulated
 
-  useEffect(() => {
-    const t = setInterval(() => {
-      setSolarFlux(prev => {
-        const drift = (Math.random() - 0.5) * 4;
-        return Math.max(70, Math.min(220, prev + drift));
-      });
-    }, 4000);
-    return () => clearInterval(t);
-  }, []);
-
-  const enriched = useMemo(() => (livePositions || []).map(pos => ({
+  const enriched = useMemo(() => (livePositions || []).slice(0, 10).map(pos => ({
     pos, telemetry: computeTelemetry(pos), id: `norad-${pos.noradId}`,
   })), [livePositions]);
 
@@ -518,97 +504,115 @@ const GlobeVisualization = () => {
     const total = enriched.length;
     const avgRisk = total ? Math.round(totalRisk / total) : 0;
     const fleetHealth = total ? Math.round(((counts.healthy + counts.warning * 0.6) / total) * 100) : 0;
-    return { counts, total, avgRisk, fleetHealth };
+    const activeAnomalies = enriched.reduce((sum, e) => sum + e.telemetry.anomalies.length, 0);
+    const topFailures = [...enriched]
+      .sort((a, b) => b.telemetry.aiRiskScore - a.telemetry.aiRiskScore)
+      .slice(0, 3);
+    return { counts, total, avgRisk, fleetHealth, activeAnomalies, topFailures };
   }, [enriched]);
-
-  const solarLabel = solarFlux > 180 ? 'STORM' : solarFlux > 140 ? 'ELEVATED' : solarFlux > 100 ? 'ACTIVE' : 'QUIET';
-  const solarColor = solarFlux > 180 ? '#ef4444' : solarFlux > 140 ? '#f59e0b' : solarFlux > 100 ? '#eab308' : '#22c55e';
 
   return (
     <div className="w-full h-full relative bg-[#020617]">
-      <Canvas camera={{ position: [0, 1.4, 5.5], fov: 45 }} gl={{ antialias: true, alpha: false }} dpr={[1, 2]}>
+      <Canvas camera={{ position: [0, 0.8, 4.2], fov: 42 }} gl={{ antialias: true, alpha: false }} dpr={[1, 2]}>
         <color attach="background" args={['#020617']} />
-        <fog attach="fog" args={['#020617', 12, 26]} />
-        <SceneContent
-          selectedId={selectedId}
-          setSelectedId={setSelectedId}
-          showTrails={showTrails}
-          showHeatmap={showHeatmap}
-          showDebris={showDebris}
-        />
+        <SceneContent selectedId={selectedId} setSelectedId={setSelectedId} />
       </Canvas>
 
-      {/* Top-left: mission control header */}
-      <div className="absolute top-2 left-2 bg-card/85 backdrop-blur-md border border-border rounded-lg px-3 py-2 min-w-[200px]">
+      {/* Top-left: compact header */}
+      <div className="absolute top-2 left-2 bg-card/85 backdrop-blur-md border border-border rounded-lg px-2.5 py-1.5">
         <div className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
           <span className="font-display text-[10px] tracking-[0.2em] text-primary">DIGITAL TWIN · LIVE</span>
         </div>
-        <div className="text-[8px] font-mono text-muted-foreground mt-1">
+        <div className="text-[8px] font-mono text-muted-foreground mt-0.5">
           {fleet.total} TRACKED · {new Date().toUTCString().slice(17, 25)} UTC
-        </div>
-        <div className="flex flex-wrap gap-x-2.5 gap-y-1 mt-2">
-          <LegendPill color={statusColors.healthy} label={`NOMINAL ${fleet.counts.healthy}`} />
-          <LegendPill color={statusColors.warning} label={`DEGRADED ${fleet.counts.warning}`} />
-          <LegendPill color={statusColors.critical} label={`CRITICAL ${fleet.counts.critical}`} />
-          <LegendPill color={statusColors['predicted-failure']} label={`PREDICTED ${fleet.counts['predicted-failure']}`} />
         </div>
       </div>
 
-      {/* Top-right: solar activity (hidden when telemetry panel open) */}
+      {/* Bottom-left: compact legend */}
+      <div className="absolute bottom-2 left-2 bg-card/85 backdrop-blur-md border border-border rounded-lg px-2.5 py-1.5 flex flex-col gap-0.5">
+        <LegendPill color={statusColors.healthy} label={`NOMINAL ${fleet.counts.healthy}`} />
+        <LegendPill color={statusColors.warning} label={`DEGRADED ${fleet.counts.warning}`} />
+        <LegendPill color={statusColors.critical} label={`CRITICAL ${fleet.counts.critical}`} />
+        <LegendPill color={statusColors['predicted-failure']} label={`PREDICTED ${fleet.counts['predicted-failure']}`} />
+      </div>
+
+      {/* Right-side AI Insights panel (hidden when telemetry panel is open) */}
       {!selectedEntry && (
-        <div className="absolute top-2 right-2 bg-card/85 backdrop-blur-md border border-border rounded-lg px-3 py-2 w-[180px]">
-          <div className="flex items-center justify-between">
+        <div className="absolute top-2 right-2 bottom-2 w-[230px] bg-card/90 backdrop-blur-md border border-border rounded-lg shadow-2xl shadow-primary/10 flex flex-col overflow-hidden animate-fade-in">
+          <div className="px-3 py-2 border-b border-border/60 bg-gradient-to-r from-primary/15 to-transparent">
             <div className="flex items-center gap-1.5">
-              <Sun className="w-3 h-3" style={{ color: solarColor }} />
-              <span className="text-[9px] font-display tracking-widest text-muted-foreground">SOLAR ACTIVITY</span>
+              <Sparkles className="w-3 h-3 text-primary" />
+              <span className="font-display text-[10px] tracking-[0.2em] text-primary">AI INSIGHTS</span>
             </div>
-            <span className="text-[9px] font-display tracking-wider" style={{ color: solarColor }}>{solarLabel}</span>
           </div>
-          <div className="mt-1.5">
-            <div className="flex items-baseline gap-1">
-              <span className="font-display text-lg leading-none" style={{ color: solarColor }}>{Math.round(solarFlux)}</span>
-              <span className="text-[9px] font-mono text-muted-foreground">F10.7 sfu</span>
+
+          <div className="p-3 space-y-3 overflow-y-auto flex-1">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-md border border-border/60 bg-muted/20 p-2">
+                <div className="text-[8px] font-display tracking-wider text-muted-foreground">FLEET HEALTH</div>
+                <div className="font-display text-xl leading-none mt-1" style={{ color: fleet.fleetHealth > 70 ? '#22c55e' : fleet.fleetHealth > 40 ? '#eab308' : '#ef4444' }}>
+                  {fleet.fleetHealth}<span className="text-[10px] text-muted-foreground">%</span>
+                </div>
+                <div className="mt-1.5"><HealthBar value={fleet.fleetHealth} color={fleet.fleetHealth > 70 ? '#22c55e' : fleet.fleetHealth > 40 ? '#eab308' : '#ef4444'} /></div>
+              </div>
+              <div className="rounded-md border border-border/60 bg-muted/20 p-2">
+                <div className="text-[8px] font-display tracking-wider text-muted-foreground">AVG RISK</div>
+                <div className="font-display text-xl leading-none mt-1" style={{ color: fleet.avgRisk > 65 ? '#ef4444' : fleet.avgRisk > 40 ? '#eab308' : '#22c55e' }}>
+                  {fleet.avgRisk}<span className="text-[10px] text-muted-foreground">/100</span>
+                </div>
+                <div className="mt-1.5"><HealthBar value={fleet.avgRisk} color={fleet.avgRisk > 65 ? '#ef4444' : fleet.avgRisk > 40 ? '#eab308' : '#22c55e'} /></div>
+              </div>
             </div>
-            <div className="h-1 mt-1.5 rounded-full bg-muted/40 overflow-hidden">
-              <div className="h-full transition-all" style={{ width: `${(solarFlux / 220) * 100}%`, background: `linear-gradient(90deg, #22c55e, #eab308, #ef4444)` }} />
+
+            <div className="rounded-md border border-border/60 bg-muted/20 p-2 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <AlertTriangle className="w-3 h-3 text-amber-500" />
+                <span className="text-[9px] font-display tracking-wider text-muted-foreground">ACTIVE ANOMALIES</span>
+              </div>
+              <span className="font-display text-base leading-none text-amber-400">{fleet.activeAnomalies}</span>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <TrendingUp className="w-3 h-3 text-primary" />
+                <span className="text-[9px] font-display tracking-wider text-muted-foreground">TOP 3 PREDICTED FAILURES</span>
+              </div>
+              <div className="space-y-1.5">
+                {fleet.topFailures.map(e => {
+                  const c = statusColors[e.telemetry.status];
+                  return (
+                    <button
+                      key={e.id}
+                      onClick={() => setSelectedId(e.id)}
+                      className="w-full text-left rounded-md border border-border/60 bg-muted/10 hover:bg-muted/30 transition-colors p-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: c, boxShadow: `0 0 6px ${c}` }} />
+                          <span className="font-display text-[10px] text-foreground truncate">{e.pos.name}</span>
+                        </div>
+                        <span className="font-display text-[11px]" style={{ color: c }}>{e.telemetry.aiRiskScore}</span>
+                      </div>
+                      <div className="mt-1"><HealthBar value={e.telemetry.aiRiskScore} color={c} /></div>
+                      <div className="text-[8px] font-mono text-muted-foreground mt-1">
+                        RUL ≈ {e.telemetry.rulDays}d · {statusLabels[e.telemetry.status]}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex h-1.5 rounded-full overflow-hidden bg-muted/30">
+              {(['healthy', 'warning', 'critical', 'predicted-failure'] as HealthState[]).map(s => {
+                const pct = fleet.total ? (fleet.counts[s] / fleet.total) * 100 : 0;
+                return <div key={s} style={{ width: `${pct}%`, backgroundColor: statusColors[s] }} />;
+              })}
             </div>
           </div>
         </div>
       )}
-
-      {/* Bottom-left: fleet analytics */}
-      <div className="absolute bottom-2 left-2 bg-card/85 backdrop-blur-md border border-border rounded-lg px-3 py-2 w-[230px]">
-        <div className="flex items-center gap-1.5">
-          <Activity className="w-3 h-3 text-primary" />
-          <span className="text-[9px] font-display tracking-widest text-muted-foreground">FLEET ANALYTICS</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2 mt-2">
-          <div>
-            <div className="text-[8px] font-mono text-muted-foreground">FLEET HEALTH</div>
-            <div className="font-display text-base leading-none text-foreground mt-0.5">{fleet.fleetHealth}<span className="text-[9px] text-muted-foreground">%</span></div>
-            <HealthBar value={fleet.fleetHealth} color={fleet.fleetHealth > 70 ? '#22c55e' : fleet.fleetHealth > 40 ? '#eab308' : '#ef4444'} />
-          </div>
-          <div>
-            <div className="text-[8px] font-mono text-muted-foreground">AVG AI RISK</div>
-            <div className="font-display text-base leading-none text-foreground mt-0.5">{fleet.avgRisk}<span className="text-[9px] text-muted-foreground">/100</span></div>
-            <HealthBar value={fleet.avgRisk} color={fleet.avgRisk > 65 ? '#ef4444' : fleet.avgRisk > 40 ? '#eab308' : '#22c55e'} />
-          </div>
-        </div>
-        <div className="flex h-1.5 mt-2 rounded-full overflow-hidden bg-muted/30">
-          {(['healthy', 'warning', 'critical', 'predicted-failure'] as HealthState[]).map(s => {
-            const pct = fleet.total ? (fleet.counts[s] / fleet.total) * 100 : 0;
-            return <div key={s} style={{ width: `${pct}%`, backgroundColor: statusColors[s] }} />;
-          })}
-        </div>
-      </div>
-
-      {/* Bottom-right: layer toggles */}
-      <div className="absolute bottom-2 right-2 bg-card/85 backdrop-blur-md border border-border rounded-lg p-1.5 flex flex-col gap-1">
-        <ToggleChip active={showTrails} onClick={() => setShowTrails(v => !v)} icon={<Orbit className="w-3 h-3" />} label="ORBITS" />
-        <ToggleChip active={showHeatmap} onClick={() => setShowHeatmap(v => !v)} icon={<Layers className="w-3 h-3" />} label="AI RISK" />
-        <ToggleChip active={showDebris} onClick={() => setShowDebris(v => !v)} icon={<span className="w-3 h-3 inline-block text-center text-[10px] leading-3">·:·</span>} label="DEBRIS" />
-      </div>
 
       {/* Telemetry panel */}
       {selectedEntry && (
@@ -617,21 +621,5 @@ const GlobeVisualization = () => {
     </div>
   );
 };
-
-function ToggleChip({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-1.5 px-2 py-1 rounded border text-[9px] font-display tracking-wider transition-colors ${
-        active
-          ? 'bg-primary/15 border-primary/50 text-primary'
-          : 'bg-transparent border-border/60 text-muted-foreground hover:text-foreground'
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
 
 export default GlobeVisualization;
