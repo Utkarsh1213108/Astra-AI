@@ -358,7 +358,7 @@ function SceneContent({
           isSelected={selectedId === e.id}
         />
       ))}
-      <OrbitControls enableZoom enablePan={false} autoRotate autoRotateSpeed={0.25} minDistance={2.6} maxDistance={6} />
+      <OrbitControls enableZoom enablePan={false} autoRotate autoRotateSpeed={0.25} minDistance={3.5} maxDistance={8} target={[0.3, 0, 0]} />
     </>
   );
 }
