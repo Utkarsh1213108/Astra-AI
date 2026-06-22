@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import { useLiveSatellites, useSatnogsData } from '@/hooks/useLiveSatellites';
@@ -10,7 +10,8 @@ import {
   Area, ComposedChart, ReferenceLine, ReferenceArea, Tooltip,
 } from 'recharts';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Activity, Thermometer, Radio, RotateCw, Loader2, Satellite } from 'lucide-react';
+import { ArrowLeft, Activity, Thermometer, Radio, RotateCw, Loader2, Satellite, AlertTriangle } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 
 const subsystemIcons: Record<string, typeof Activity> = {
   power: Activity,
@@ -21,19 +22,34 @@ const subsystemIcons: Record<string, typeof Activity> = {
 
 const SatelliteDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const { data: livePositions, isLoading } = useLiveSatellites();
+  const navigate = useNavigate();
+  const { data: livePositions, isLoading, isError } = useLiveSatellites();
   const satellites = useMemo(() => liveSatellitesToSatellites(livePositions || []), [livePositions]);
   
   // Normalize ID: support both "norad-25544" and raw number formats
   const sat = useMemo(() => {
     if (!id || !satellites.length) return null;
-    // Direct match
-    const direct = satellites.find(s => s.id === id);
-    if (direct) return direct;
-    // Try matching by norad ID only (strip prefix)
-    const numericId = id.replace(/^norad-/, '');
-    return satellites.find(s => s.noradId === numericId || s.id === `norad-${numericId}`);
+    const numericId = String(id).replace(/^norad-/i, '').trim();
+    return (
+      satellites.find(s => s.id === id) ||
+      satellites.find(s => s.noradId === numericId) ||
+      satellites.find(s => s.id === `norad-${numericId}`) ||
+      null
+    );
   }, [id, satellites]);
+
+  // Redirect to Command Center if satellite truly isn't available
+  const notFound = !isLoading && !sat && (livePositions !== undefined);
+  useEffect(() => {
+    if (!notFound) return;
+    toast({
+      title: 'Telemetry unavailable',
+      description: `Satellite "${id}" is not in the live fleet. Returning to Command Center.`,
+      variant: 'destructive',
+    });
+    const t = setTimeout(() => navigate('/dashboard', { replace: true }), 2500);
+    return () => clearTimeout(t);
+  }, [notFound, id, navigate]);
 
   const noradIdNum = sat ? parseInt(sat.noradId) : null;
   const { data: satnogsData } = useSatnogsData(noradIdNum);
@@ -121,14 +137,33 @@ const SatelliteDetail = () => {
     );
   }
 
-  if (!sat) {
+  if (isError) {
     return (
       <DashboardLayout>
         <div className="p-8 text-center space-y-3">
-          <Satellite className="w-10 h-10 text-muted-foreground mx-auto" />
-          <p className="text-muted-foreground">Satellite "{id}" not found in live tracking data.</p>
-          <p className="text-xs text-muted-foreground">This may be a satellite that is no longer being tracked or the ID format has changed.</p>
+          <AlertTriangle className="w-10 h-10 text-destructive mx-auto" />
+          <p className="text-foreground">Failed to load telemetry data.</p>
+          <p className="text-xs text-muted-foreground">The live satellite feed is unreachable. Please try again shortly.</p>
           <Link to="/dashboard" className="text-primary underline text-sm">Back to Command Center</Link>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!sat) {
+    return (
+      <DashboardLayout>
+        <div className="p-8 text-center space-y-3 max-w-md mx-auto">
+          <Satellite className="w-10 h-10 text-warning mx-auto" />
+          <h2 className="font-display text-base text-foreground">Telemetry Unavailable</h2>
+          <p className="text-sm text-muted-foreground">
+            Telemetry data for satellite <span className="text-foreground font-mono">{id}</span> is currently unavailable.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            The satellite may no longer be tracked, or the live feed hasn't returned its position yet.
+            Redirecting you to Command Center…
+          </p>
+          <Link to="/dashboard" className="inline-block text-primary underline text-sm">Return now</Link>
         </div>
       </DashboardLayout>
     );
