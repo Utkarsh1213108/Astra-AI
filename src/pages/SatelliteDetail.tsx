@@ -38,18 +38,18 @@ const SatelliteDetail = () => {
     );
   }, [id, satellites]);
 
-  // Redirect to Command Center if satellite truly isn't available
-  const notFound = !isLoading && !sat && (livePositions !== undefined);
+  // If the requested satellite isn't in the available fleet, dynamically
+  // redirect to the first available satellite instead of showing an empty page.
+  const notFound = !isLoading && !sat && satellites.length > 0;
   useEffect(() => {
     if (!notFound) return;
+    const fallback = satellites[0];
     toast({
-      title: 'Telemetry unavailable',
-      description: `Satellite "${id}" is not in the live fleet. Returning to Command Center.`,
-      variant: 'destructive',
+      title: 'Satellite not found',
+      description: `"${id}" is not currently tracked. Showing ${fallback.name} instead.`,
     });
-    const t = setTimeout(() => navigate('/dashboard', { replace: true }), 2500);
-    return () => clearTimeout(t);
-  }, [notFound, id, navigate]);
+    navigate(`/satellite/${fallback.id}`, { replace: true });
+  }, [notFound, id, navigate, satellites]);
 
   const noradIdNum = sat ? parseInt(sat.noradId) : null;
   const { data: satnogsData } = useSatnogsData(noradIdNum);
