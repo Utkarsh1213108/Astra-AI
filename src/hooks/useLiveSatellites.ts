@@ -1,4 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
+import { getLocalFleet } from '@/data/localFleet';
+
+const CACHE_KEY = 'astra:live-satellites:last';
 
 export interface LiveSatellitePosition {
   noradId: number;
@@ -48,19 +51,38 @@ async function fetchLivePositions(): Promise<LiveSatellitePosition[]> {
   const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
   const apiKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-  const res = await fetch(
-    `https://${projectId}.supabase.co/functions/v1/satellite-data?action=positions`,
-    {
-      headers: {
-        'apikey': apiKey,
-        'Authorization': `Bearer ${apiKey}`,
-      },
-    }
-  );
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(
+      `https://${projectId}.supabase.co/functions/v1/satellite-data?action=positions`,
+      {
+        headers: {
+          'apikey': apiKey,
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timeout);
 
-  if (!res.ok) throw new Error('Failed to fetch satellite positions');
-  const json = await res.json();
-  return json.positions || [];
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const positions: LiveSatellitePosition[] = json.positions || [];
+    if (positions.length === 0) throw new Error('Empty positions');
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(positions)); } catch {}
+    return positions;
+  } catch (err) {
+    // Graceful degradation: prefer cached live data, else local demo fleet.
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached) as LiveSatellitePosition[];
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return getLocalFleet();
+  }
 }
 
 async function fetchOrbitTrail(noradId: number): Promise<OrbitTrailPoint[]> {
@@ -106,6 +128,18 @@ export function useLiveSatellites() {
     queryFn: fetchLivePositions,
     refetchInterval: 30000,
     staleTime: 15000,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+    placeholderData: () => {
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached) as LiveSatellitePosition[];
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+      return getLocalFleet();
+    },
   });
 }
 
