@@ -113,6 +113,34 @@ export function generateAnomalyEvents(satellites: Satellite[]): AnomalyEvent[] {
       }
     });
   });
+
+  // Guarantee a non-empty anomaly feed for demo mode. If the deterministic
+  // health model produced no out-of-range sensors, synthesize a baseline
+  // anomaly per satellite so the Anomaly Engine and alerts always render.
+  if (events.length === 0 && satellites.length > 0) {
+    satellites.slice(0, Math.min(satellites.length, 6)).forEach((sat, idx) => {
+      const rng = seededRandom((parseInt(sat.noradId) || 1) + 7919);
+      const sub = sat.subsystems[idx % sat.subsystems.length];
+      const sensor = sub.sensors[0];
+      const score = Math.round(45 + rng() * 50);
+      const severity: AnomalyEvent['severity'] =
+        score >= 80 ? 'critical' : score >= 60 ? 'high' : score >= 40 ? 'medium' : 'low';
+      events.push({
+        id: `anom-demo-${sat.noradId}-${sub.key}`,
+        satelliteId: sat.id,
+        satelliteName: sat.name,
+        timestamp: new Date(Date.now() - idx * 1800_000 - rng() * 3600_000 * 6).toISOString(),
+        subsystem: sub.name,
+        sensor: sensor.name,
+        anomalyScore: score,
+        severity,
+        rootCause: `Predictive model flagged ${sensor.name} drift on ${sat.name}. Pattern consistent with early-stage ${sub.name.toLowerCase()} degradation; no immediate operational impact.`,
+        resolved: rng() > 0.6,
+        actionTaken: rng() > 0.5 ? 'Telemetry baseline re-calibrated. Continuing extended monitoring.' : undefined,
+      });
+    });
+  }
+
   return events;
 }
 
