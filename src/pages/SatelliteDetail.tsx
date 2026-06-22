@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import { useLiveSatellites, useSatnogsData } from '@/hooks/useLiveSatellites';
 import { liveSatellitesToSatellites, generateTelemetryStream } from '@/data/generatedData';
+import { getLocalFleet } from '@/data/localFleet';
 import { TelemetryPoint } from '@/data/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -24,7 +25,15 @@ const SatelliteDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: livePositions, isLoading, isError } = useLiveSatellites();
-  const satellites = useMemo(() => liveSatellitesToSatellites(livePositions || []), [livePositions]);
+  // Merge live positions with the local demo fleet so requested satellites
+  // (e.g. ISS / norad-25544) are always resolvable even when the live API
+  // omits them. Live positions take precedence on duplicate NORAD IDs.
+  const satellites = useMemo(() => {
+    const live = livePositions || [];
+    const liveIds = new Set(live.map(p => p.noradId));
+    const merged = [...live, ...getLocalFleet().filter(p => !liveIds.has(p.noradId))];
+    return liveSatellitesToSatellites(merged);
+  }, [livePositions]);
   
   // Normalize ID: support both "norad-25544" and raw number formats
   const sat = useMemo(() => {
