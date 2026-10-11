@@ -1,0 +1,8 @@
+{
+    "spacecraft": "S-1",
+    "window": 100,
+    "threshold": 0.9524,
+    "training_median": 0.2546,
+    "training_mad": 0.1744,
+    "channels": 18
+}
